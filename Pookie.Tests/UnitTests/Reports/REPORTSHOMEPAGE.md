@@ -29,7 +29,7 @@ The Reports test suite contains automated end-to-end tests for the Reports modul
 
 ---
 
-## Test File Overview
+## Test File overview
 
 | Folder | File | Test Count | Primary Focus |
 |--------|------|------------|---------------|
