@@ -247,41 +247,6 @@ This is selected via `WebElementHelper.SelectWorker()`.
 
 ---
 
-## Coding Standards Applied
-
-### 1. CSS Classes Over IDs 
-All selectors use CSS classes and semantic attributes instead of ASP.NET generated IDs:
-
-```csharp
-// Good - Uses CSS classes and partial IDs
-"a#ctl00_ContentPlaceHolder1_ucForms_lnkAuditC.moreInfo, " +
-"a[data-formtype='ac'].moreInfo, " +
-"a.list-group-item[href*='AuditCs.aspx']"
-```
-
-### 2. Use Existing Helper Methods 
-Tests leverage:
-- `CommonTestHelper.NavigateToFormsTab()` - For login → role → search → forms flow
-- `CommonTestHelper.FindPc1Display()` - For PC1 ID verification
-- `CommonTestHelper.ClickElement()` - For clicking with JavaScript fallback
-- `WebElementHelper.SelectWorker()` - For worker dropdown
-- `WebElementHelper.SelectDropdownOption()` - For all dropdown selections
-- `WebElementHelper.FindElementInModalOrPage()` - For finding elements
-- `WebElementHelper.SetInputValue()` - For setting input fields
-
-### 3. No Unnecessary Try-Catch 
-Tests let exceptions bubble up for clear test failures. Try-catch is only used in helper methods for fallback logic (not shown in test methods themselves).
-
-### 4. Clear Error Messages 
-All assertions use descriptive messages:
-
-```csharp
-Assert.False(string.IsNullOrWhiteSpace(pc1Display), 
-    "Unable to locate PC1 ID on Audit-C page.");
-```
-
----
-
 ## What to Keep in Mind
 
 ### When Modifying Tests
