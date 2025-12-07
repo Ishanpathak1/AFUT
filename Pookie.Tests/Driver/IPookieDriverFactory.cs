@@ -9,5 +9,6 @@ namespace AFUT.Tests.Driver
     public interface IPookieDriverFactory
     {
         IPookieWebDriver CreateDriver();
+        IPookieWebDriver CreateDriver(string downloadDirectory);
     }
 }
