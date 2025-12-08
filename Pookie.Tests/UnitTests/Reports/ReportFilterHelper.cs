@@ -988,9 +988,131 @@ namespace AFUT.Tests.UnitTests.Reports
         }
 
         /// <summary>
-        /// Clicks the "Run Report" button and waits for the DevExpress viewer to load.
+        /// Verifies that a report has been successfully loaded and rendered in the DevExpress report viewer.
+        /// Checks for: report image with data, page information, no error messages, and functional toolbar.
         /// </summary>
-        public static void RunReport(IPookieWebDriver driver, ITestOutputHelper output, int timeoutSeconds = 60)
+        /// <param name="driver">Web driver instance</param>
+        /// <param name="output">Test output helper for logging</param>
+        /// <param name="timeoutSeconds">Maximum time to wait for report content to appear</param>
+        public static void VerifyReportLoadedInViewer(IPookieWebDriver driver, ITestOutputHelper output, int timeoutSeconds = 30)
+        {
+            output.WriteLine("[INFO] Verifying report content loaded in viewer...");
+
+            var endTime = DateTime.Now.AddSeconds(timeoutSeconds);
+            bool reportContentFound = false;
+
+            while (DateTime.Now < endTime && !reportContentFound)
+            {
+                // Check 1: Look for the report image element with actual data
+                var reportImage = driver.FindElements(By.CssSelector(
+                        "img.dxrd-pointer-events-none, " +
+                        "img[class*='dxrd'][class*='width'][class*='height']"))
+                    .FirstOrDefault(el => el.Displayed);
+
+                if (reportImage != null)
+                {
+                    var imgSrc = reportImage.GetAttribute("src");
+                    var imgAlt = reportImage.GetAttribute("alt");
+
+                    // Verify the image has actual content (data URI or valid source)
+                    if (!string.IsNullOrWhiteSpace(imgSrc) && 
+                        (imgSrc.StartsWith("data:image", StringComparison.OrdinalIgnoreCase) || 
+                         imgSrc.StartsWith("http", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        output.WriteLine($"  [PASS] Report image found with valid source");
+                        
+                        // Check 2: Verify page information is present (indicates report has pages)
+                        if (!string.IsNullOrWhiteSpace(imgAlt))
+                        {
+                            output.WriteLine($"  [INFO] Report page info: {imgAlt}");
+                            
+                            // Check if alt text contains page information
+                            if (imgAlt.Contains("page", StringComparison.OrdinalIgnoreCase))
+                            {
+                                output.WriteLine($"  [PASS] Report contains page information");
+                            }
+                        }
+
+                        reportContentFound = true;
+                        break;
+                    }
+                }
+
+                Thread.Sleep(1000);
+            }
+
+            if (!reportContentFound)
+            {
+                output.WriteLine($"  [ERROR] Report content did not load within {timeoutSeconds} seconds");
+                
+                // Check for error messages in the viewer
+                var errorMessages = driver.FindElements(By.CssSelector(
+                        "div.dxrd-preview-error-message, " +
+                        "div[class*='error'], " +
+                        "span.Error[style*='color: red']"))
+                    .Where(el => el.Displayed && !string.IsNullOrWhiteSpace(el.Text))
+                    .ToList();
+
+                if (errorMessages.Any())
+                {
+                    output.WriteLine($"  [ERROR] Error messages found in viewer:");
+                    foreach (var msg in errorMessages)
+                    {
+                        output.WriteLine($"    - {msg.Text}");
+                    }
+                }
+
+                throw new InvalidOperationException($"Report content (image) did not appear in viewer within {timeoutSeconds} seconds");
+            }
+
+            // Check 3: Verify no error messages are displayed in the viewer
+            var viewerErrors = driver.FindElements(By.CssSelector(
+                    "div.dxrd-preview-error-message, " +
+                    "div.dx-error-message"))
+                .Where(el => el.Displayed && !string.IsNullOrWhiteSpace(el.Text))
+                .ToList();
+
+            if (viewerErrors.Any())
+            {
+                output.WriteLine($"  [WARN] Error messages detected in viewer:");
+                foreach (var error in viewerErrors)
+                {
+                    output.WriteLine($"    - {error.Text}");
+                }
+            }
+            else
+            {
+                output.WriteLine($"  [PASS] No error messages in viewer");
+            }
+
+            // Check 4: Verify export toolbar is functional (export button is enabled)
+            var exportButton = driver.FindElements(By.CssSelector(
+                    "div.dxrd-preview-export-to, " +
+                    "div.dx-menu-item[aria-label='Export To'], " +
+                    "div.dxrd-preview-export-toolbar-item div.dx-item"))
+                .FirstOrDefault(el => el.Displayed);
+
+            if (exportButton != null)
+            {
+                output.WriteLine($"  [PASS] Export toolbar is functional and visible");
+            }
+            else
+            {
+                output.WriteLine($"  [WARN] Export button not found or not visible");
+            }
+
+            output.WriteLine("[PASS] Report successfully loaded and rendered in viewer");
+        }
+
+        /// <summary>
+        /// Clicks the "Run Report" button and waits for the DevExpress viewer to load.
+        /// Optionally verifies that the report content was actually rendered.
+        /// </summary>
+        /// <param name="driver">Web driver instance</param>
+        /// <param name="output">Test output helper for logging</param>
+        /// <param name="timeoutSeconds">Maximum time to wait for viewer to load</param>
+        /// <param name="verifyContent">If true, performs additional verification that report content was rendered (default: true)</param>
+        public static void RunReport(IPookieWebDriver driver, ITestOutputHelper output, int timeoutSeconds = 60, bool verifyContent = true)
         {
             output.WriteLine("[INFO] Clicking 'Run Report' button...");
 
@@ -1108,6 +1230,12 @@ namespace AFUT.Tests.UnitTests.Reports
             // Extra wait to ensure everything is settled
             Thread.Sleep(2000);
             output.WriteLine("  [PASS] Report viewer loaded successfully");
+
+            // Optionally verify that report content was actually rendered
+            if (verifyContent)
+            {
+                VerifyReportLoadedInViewer(driver, output, timeoutSeconds: 30);
+            }
         }
 
         /// <summary>
