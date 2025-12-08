@@ -75,6 +75,21 @@ namespace AFUT.Tests.Driver
             return new DriverWrapper(driver, options);
         }
 
+        public IPookieWebDriver CreateDriver(string downloadDirectory)
+        {
+            var options = new ChromeOptions();
+            options.AddArguments(MiscChromeOptions);
+
+            // Configure download directory
+            options.AddUserProfilePreference("download.default_directory", downloadDirectory);
+            options.AddUserProfilePreference("download.prompt_for_download", false);
+            options.AddUserProfilePreference("download.directory_upgrade", true);
+            options.AddUserProfilePreference("safebrowsing.enabled", true);
+
+            var driver = Task.Run(GetChormeDriverServiceAsync).GetAwaiter().GetResult();
+            return new DriverWrapper(driver, options);
+        }
+
 
         private static async Task<string> DownloadChromeDriverAsync(string milestone)
         {
