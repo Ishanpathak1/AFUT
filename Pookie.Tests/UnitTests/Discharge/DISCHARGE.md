@@ -47,11 +47,11 @@ Case Status Returns to "Active"
 
 | File | Tests | Primary Focus |
 |------|-------|---------------|
-| **DischargeTests.cs** | 3 | Navigation, discharge reason validation, reinstatement |
+| **DischargeTests.cs** | 4 | Navigation, discharge reason validation, conditional fields, reinstatement |
 
-**Total Tests**: 3 (all parameterized with PC1 IDs)
+**Total Tests**: 4 (all parameterized with PC1 IDs)
 
-**Test Priorities**: Tests are ordered 1-3 using `[TestPriority]` attribute for sequential execution.
+**Test Priorities**: Tests are ordered 1-4 using `[TestPriority]` attribute for sequential execution.
 
 ---
 
@@ -61,7 +61,8 @@ Tests run in priority order:
 
 1. **Priority 1**: Navigate to Discharge form
 2. **Priority 2**: Submit Discharge form with validation (includes "Other specify" validation)
-3. **Priority 3**: Reinstate case from Discharge form
+3. **Priority 3**: Validate conditional fields for specific discharge reasons (18, 21, 25, 37)
+4. **Priority 4**: Reinstate case from Discharge form
 
 ---
 
@@ -168,7 +169,142 @@ Tests run in priority order:
 
 ---
 
-### Test 3: ReinstateCaseFromDischargeForm (Priority 3)
+### Test 3: ValidateConditionalFieldsForSpecificDischargeReasons (Priority 3)
+
+**Purpose**: Comprehensive test of discharge reasons that trigger conditional fields and validation messages.
+
+**Test Flow**:
+
+#### Part 1: Navigate to Discharge Form
+1-6. Same as Test 1 (navigate to Discharge form)
+
+#### Part 2: Enter Discharge Date
+7-10. Same as Test 2 (enter discharge date)
+
+#### Part 3: Submit to Proceed to Reason Selection
+11-13. Same as Test 2 (submit to reach reason selection)
+
+#### Part 4: Test Option 18 - Target Child Death
+14. Select discharge reason "18" (Target Child Death)
+15. Trigger change event via JavaScript
+16. Wait for page update (1500ms)
+
+#### Part 5: Verify Target Child DOD Field Appears
+17. Find DOD container: `div[id='divTargetChildDOD']`
+18. Assert DOD container is **displayed**
+19. Find DOD input: `input.form-control[id*='txtTargetChildDOD']`
+20. Assert DOD input is **displayed**
+
+#### Part 5a: Test Validation - Submit Without DOD
+21. Find Submit button
+22. Click Submit without entering DOD
+23. Wait for validation
+24. Verify validation message: "Missing Target Child DOD"
+25. Assert validation message is displayed
+
+#### Part 5b: Fill DOD Field
+26. Enter a date (30 days ago) in MM/dd/yy format
+27. Trigger blur event
+
+**Conditional Logic**: When option 18 is selected, Target Child DOD field appears (required).
+**Validation**: Submitting without DOD shows "Missing Target Child DOD" error.
+
+#### Part 6: Test Option 21 - PC1 Death
+28. Select discharge reason "21" (PC1 Death)
+29. Trigger change event via JavaScript
+30. Wait for page update (1500ms)
+
+#### Part 7: Verify PC1 DOD Field Appears
+31. Find DOD container: `div[id='divPC1DOD']`
+32. Assert DOD container is **displayed**
+33. Find DOD input: `input.form-control[id*='txtPC1DOD']`
+34. Assert DOD input is **displayed**
+
+#### Part 7a: Test Validation - Submit Without DOD
+35. Find Submit button
+36. Click Submit without entering DOD
+37. Wait for validation
+38. Verify validation message: "Missing PC1 DOD"
+39. Assert validation message is displayed
+
+#### Part 7b: Fill DOD Field
+40. Enter a date (30 days ago) in MM/dd/yy format
+41. Trigger blur event
+
+**Conditional Logic**: When option 21 is selected, PC1 DOD field appears (required).
+**Validation**: Submitting without DOD shows "Missing PC1 DOD" error.
+
+#### Part 8: Test Option 25 - Transferred to Another Program
+42. Select discharge reason "25" (Transferred to another program)
+43. Trigger change event via JavaScript
+44. Wait for page update (1500ms)
+
+#### Part 9: Verify List Program Field Appears
+45. Find transfer container: `div[id='divTransferredtoProgram']`
+46. Assert transfer container is **displayed**
+47. Find program input: `input.form-control[id*='txtTransferredtoProgram']`
+48. Assert program input is **displayed**
+
+#### Part 9a: Test Validation - Submit Without Program Name
+49. Find Submit button
+50. Click Submit without entering program name
+51. Wait for validation
+52. Verify validation message: "Missing Transfer to Program"
+53. Assert validation message is displayed
+
+#### Part 9b: Fill Program Field
+54. Enter program name: "Test Transfer Program"
+55. Trigger blur event
+
+**Conditional Logic**: When option 25 is selected, "List program" text field appears (required).
+**Validation**: Submitting without program name shows "Missing Transfer to Program" error.
+
+#### Part 10: Test Option 37 - Transfer to Another HFNY Program
+56. Select discharge reason "37" (Transfer to another HFNY program)
+57. Trigger change event via JavaScript
+58. Wait for page update (1500ms)
+
+#### Part 10a: Test Validation - Submit Without Program Selection
+59. Find Submit button
+60. Click Submit without selecting program
+61. Wait for validation
+62. Verify validation message: "Missing Transfer to Program"
+63. Assert validation message is displayed
+
+**First Validation**: Must select a program from dropdown before proceeding.
+
+#### Part 10b: Select Transfer Program
+64. Find program dropdown: `select[id*='ddlTransferredtoProgramFK']`
+65. Get all valid program options (exclude "--Select--")
+66. Select random valid program from dropdown
+67. Wait for page update
+
+**Program Dropdown**: Contains multiple HFNY programs (Program 2, Program 3, etc.)
+
+#### Part 10c: Check Acknowledgment Checkbox
+68. Find acknowledgment checkbox: `input[type='checkbox'][id*='chkAcknowledgeRemoval']`
+69. Check if already checked
+70. If not checked, click to check it
+71. Wait for page update
+
+**Acknowledgment**: User must acknowledge that discharge-related forms (FollowUp, PSI) will be removed when transfer is accepted.
+
+#### Part 10d: Submit and Verify Supervisory Approval Message
+72. Find Submit button
+73. Click Submit
+74. Wait for submission (2000ms)
+75. Search for approval message containing "supervisory approval"
+76. If not found on page, check toast message
+77. Assert message contains "supervisory approval"
+78. Assert message indicates forms require approval before transfer
+
+**Expected Message**: "There are forms for this case which require supervisory approval before transfer to another HFNY program."
+
+**Conditional Logic**: When option 37 is selected with program and acknowledgment, validation message appears preventing submission if forms require supervisory approval.
+
+---
+
+### Test 4: ReinstateCaseFromDischargeForm (Priority 4)
 
 **Purpose**: Test case reinstatement functionality to restore a discharged case to active status.
 
@@ -206,7 +342,12 @@ Tests run in priority order:
 |-------|----------|----------|-------------|-------|
 | **Discharge Date** | `input.form-control[class*='2dy']` | Yes | - | Date in MM/dd/yy format |
 | **Discharge Reason** | `select[id*='ddlDischargeReason']` | Yes | - | Dropdown with multiple reasons + "Other" |
-| **Discharge Reason Specify** | `input[id*='Specify']` | Conditional | If Reason = "Other" | Visible only when "Other" selected |
+| **Discharge Reason Specify** | `input[id*='Specify']` | Conditional | If Reason = "Other" (99) | Visible only when "Other" selected |
+| **Target Child DOD** | `input.form-control[id*='txtTargetChildDOD']` | Conditional | If Reason = 18 | Date of Death for Target Child |
+| **PC1 DOD** | `input.form-control[id*='txtPC1DOD']` | Conditional | If Reason = 21 | Date of Death for PC1 |
+| **List Program (text)** | `input.form-control[id*='txtTransferredtoProgram']` | Conditional | If Reason = 25 | Program name for transfer |
+| **List Program (dropdown)** | `select.form-control[id*='ddlTransferredtoProgramFK']` | Conditional | If Reason = 37 | Select HFNY program for transfer |
+| **Acknowledgment Checkbox** | `input[type='checkbox'][id*='chkAcknowledgeRemoval']` | Conditional | If Reason = 37 | Acknowledge form removal on transfer |
 
 ### Discharge Reasons
 
@@ -217,7 +358,11 @@ Tests run in priority order:
 - Lost contact
 - Ineligible for services
 - Child removed from home
-- **Other** (value "99") - Requires specify text
+- **18**: Target Child Death - Requires DOD (Date of Death) field
+- **21**: PC1 Death - Requires DOD (Date of Death) field
+- **25**: Transferred to another program - Requires "List program" text field
+- **37**: Transfer to another HFNY program - Shows supervisory approval message on submit
+- **99**: Other - Requires specify text
 
 ---
 
@@ -303,7 +448,131 @@ ELSE
 
 ---
 
-### 3. Discharge Pages
+### 3. Conditional Date of Death (DOD) Fields
+
+**Rule**: When specific death-related discharge reasons are selected, a DOD (Date of Death) field appears and becomes **required**.
+
+#### Option 18: Target Child Death
+
+**Logic**:
+```
+IF Discharge Reason = 18 (Target Child Death)
+THEN
+    Container "divTargetChildDOD" → Visible
+    Input "txtTargetChildDOD" → Required
+    Label: "DOD:" appears
+```
+
+**Field Details**:
+- Date input with calendar picker (`.input-group.date`)
+- Uses 2-digit year format (`class="form-control 2dy"`)
+- Date input selector: `input[id*='txtTargetChildDOD']`
+
+#### Option 21: PC1 Death
+
+**Logic**:
+```
+IF Discharge Reason = 21 (PC1 Death)
+THEN
+    Container "divPC1DOD" → Visible
+    Input "txtPC1DOD" → Required
+    Label: "DOD:" appears
+```
+
+**Field Details**:
+- Date input with calendar picker (`.input-group.date`)
+- Uses 2-digit year format (`class="form-control 2dy"`)
+- Date input selector: `input[id*='txtPC1DOD']`
+
+**Test Coverage**: Test 3 validates both DOD fields appear, are accessible, and show appropriate validation messages when submitted empty.
+
+---
+
+### 4. Conditional "List Program" Field
+
+**Rule**: When discharge reason 25 (Transferred to another program) is selected, a "List program" text field appears and becomes **required**.
+
+**Logic**:
+```
+IF Discharge Reason = 25 (Transferred to another program)
+THEN
+    Container "divTransferredtoProgram" → Visible
+    Input "txtTransferredtoProgram" → Required
+    Label: "List program" appears
+```
+
+**Field Details**:
+- Standard text input (`class="form-control"`)
+- Used to specify the program name participant is transferring to
+- Input selector: `input[id*='txtTransferredtoProgram']`
+
+**Test Coverage**: Test 3 validates this field appears, shows validation when empty, and accepts input.
+
+---
+
+### 5. Comprehensive Validation Testing
+
+**Test 3 Validation Approach**: For each discharge reason with conditional fields, the test follows a pattern:
+
+1. **Field Appearance**: Verify conditional field appears when reason is selected
+2. **Empty Submission**: Submit without filling required field
+3. **Validation Message**: Verify appropriate error message appears
+4. **Fill Field**: Enter valid data in the field
+5. **Continue**: Proceed to next test
+
+**Benefits of This Approach**:
+- Ensures validation is working correctly
+- Confirms error messages are displayed to users
+- Tests complete user workflow (with mistakes)
+- Validates field requirements are enforced
+
+**Important Implementation Detail**: After validation appears, elements may become stale (their DOM references are no longer valid). The test handles this by **re-finding elements** after validation before attempting to fill them with valid data. This pattern prevents `StaleElementReferenceException` errors.
+
+**Validation Testing by Option**:
+- **Option 18**: Validates "Missing Target Child DOD" error
+- **Option 21**: Validates "Missing PC1 DOD" error
+- **Option 25**: Validates "Missing Transfer to Program" error
+- **Option 37**: Validates "Missing Transfer to Program" error, then supervisory approval message
+
+---
+
+### 6. Supervisory Approval Message for Option 37
+
+**Rule**: When discharge reason 37 (Transfer to another HFNY program) is selected and submitted, a validation message appears if forms require supervisory approval.
+
+**Logic**:
+```
+IF Discharge Reason = 37 (Transfer to another HFNY program)
+AND Forms require supervisory approval
+THEN
+    Show message: "There are forms for this case which require 
+                   supervisory approval before transfer to 
+                   another HFNY program."
+    Prevent submission
+```
+
+**Message Location**: Can appear either:
+- On page as text/alert
+- In toast notification
+
+**Purpose**: Ensures forms requiring supervisor review are approved before case transfer.
+
+**Additional Requirements for Option 37**:
+- Must select a program from dropdown (`ddlTransferredtoProgramFK`)
+- Must check acknowledgment checkbox (`chkAcknowledgeRemoval`)
+- Validation occurs in two stages:
+  1. First validates program is selected ("Missing Transfer to Program")
+  2. Then validates supervisory approval requirement
+
+**Test Coverage**: Test 3 validates:
+1. "Missing Transfer to Program" validation when program not selected
+2. Program dropdown selection
+3. Acknowledgment checkbox checking
+4. Supervisory approval message after complete submission
+
+---
+
+### 7. Discharge Pages
 
 **PreDischarge.aspx**:
 - Shown when case is **not yet discharged**
@@ -319,7 +588,7 @@ ELSE
 
 ---
 
-### 4. Case Reinstatement
+### 8. Case Reinstatement
 
 **Purpose**: Restore a discharged case to active status if participant returns to services.
 
@@ -341,11 +610,11 @@ Case history records reinstatement
 - Discharge was entered in error
 - Participant re-enrolls
 
-**Test Coverage**: Test 3 validates reinstatement functionality.
+**Test Coverage**: Test 4 validates reinstatement functionality.
 
 ---
 
-### 5. Date Format
+### 9. Date Format
 
 **Format**: `MM/dd/yy` (short year format)
 
@@ -357,7 +626,7 @@ Case history records reinstatement
 
 ---
 
-### 6. jQuery Toast Notifications
+### 10. jQuery Toast Notifications
 
 **Success Toasts**:
 
@@ -380,7 +649,7 @@ Case history records reinstatement
 
 ---
 
-### 7. Validation Selectors
+### 11. Validation Selectors
 
 **Validation Message Selectors** (multiple tried for robustness):
 ```css
@@ -391,6 +660,16 @@ span[id*='rfvSpecify']
 ```
 
 **Why Multiple?**: ASP.NET validation can render in different formats depending on configuration.
+
+**Validation Messages by Discharge Reason**:
+- **Option 18**: "Missing Target Child DOD" - shown when DOD field is not filled
+- **Option 21**: "Missing PC1 DOD" - shown when DOD field is not filled
+- **Option 25**: "Missing Transfer to Program" - shown when program name is not entered
+- **Option 37**: "Missing Transfer to Program" - shown when program dropdown is not selected
+- **Option 37 (after program selected)**: "There are forms for this case which require supervisory approval before transfer to another HFNY program."
+- **Option 99**: Specify field required validation - shown when "Other" specify field is empty
+
+**XPath Search**: Test uses XPath to search for validation messages containing specific text, as they may appear in various locations (page content, toast notifications, validation spans).
 
 ---
 
@@ -408,11 +687,13 @@ span[id*='rfvSpecify']
 
 5. **Long Wait After "Other" Selection**: 1500ms wait needed for specify field to appear.
 
+6. **Re-find Elements After Validation**: After submitting and triggering validation, elements become stale. Always re-find elements before interacting with them post-validation.
+
 ---
 
 ### When Adding New Tests
 
-1. **Assign Priority**: Add `[TestPriority(N)]` with number > 3.
+1. **Assign Priority**: Add `[TestPriority(N)]` with number > 4.
 
 2. **Use Parameterization**: Add `[Theory]` and `[MemberData(nameof(GetTestPc1Ids))]`.
 
@@ -449,6 +730,15 @@ span[id*='rfvSpecify']
 7. **Dropdown Options Empty**: Excluding all options including valid ones.
    - **Solution**: Only exclude "Other" (value "99") and placeholder, keep all others.
 
+8. **Conditional Fields Not Appearing**: DOD or List Program fields don't show after selecting reason.
+   - **Solution**: Verify change event triggered, increase wait time to 1500ms, check div IDs match.
+
+9. **Supervisory Approval Message Not Found**: Message expected but not appearing for option 37.
+   - **Solution**: Check both page content and toast notification, verify case has forms requiring approval.
+
+10. **Stale Element Reference After Validation**: Elements become stale after submitting and triggering validation.
+   - **Solution**: Re-find elements after validation appears before interacting with them again. The test now handles this by re-finding input fields after validation.
+
 ---
 
 ## Test Data Requirements
@@ -457,20 +747,22 @@ span[id*='rfvSpecify']
 - Test user with DataEntry role
 - Valid PC1 IDs in `appsettings.json` under `TestPc1Ids`
 - Cases must be:
-  - **Active** (not already discharged) for Tests 1-2
-  - **Discharged** for Test 3 (can be discharged by Test 2)
+  - **Active** (not already discharged) for Tests 1-3
+  - **Discharged** for Test 4 (can be discharged by Test 2 or Test 3)
 
 ### Test Creates
-- Discharge records (Test 2)
+- Discharge records (Test 2, Test 3)
 
 ### Test Modifies
-- Case status: Active → Discharged (Test 2)
-- Case status: Discharged → Active (Test 3)
+- Case status: Active → Discharged (Test 2, Test 3)
+- Case status: Discharged → Active (Test 4)
 
 ### Test Deletes
 - None (but reinstatement reverses discharge)
 
 **Net Impact**: Case is discharged and then reinstated (returns to original active status).
+
+**Note**: Test 3 validates conditional fields but does not complete submission (only validates field appearance).
 
 ---
 
@@ -489,7 +781,10 @@ dotnet test --filter "FullyQualifiedName~DischargeTests.NavigateToDischargeForm"
 # Validation and submission (Priority 2)
 dotnet test --filter "FullyQualifiedName~DischargeTests.SubmitDischargeFormWithValidation"
 
-# Reinstatement (Priority 3)
+# Conditional fields validation (Priority 3)
+dotnet test --filter "FullyQualifiedName~DischargeTests.ValidateConditionalFieldsForSpecificDischargeReasons"
+
+# Reinstatement (Priority 4)
 dotnet test --filter "FullyQualifiedName~DischargeTests.ReinstateCaseFromDischargeForm"
 ```
 
@@ -529,6 +824,22 @@ dotnet test --filter "FullyQualifiedName~DischargeTests.ReinstateCaseFromDischar
 - **Issue**: No valid options found after filtering
 - **Solution**: Verify discharge reason dropdown has options other than "Other" and placeholder
 
+### Test Fails: "Target Child DOD container was not found"
+- **Issue**: Option 18 selected but DOD field didn't appear
+- **Solution**: Verify change event triggered, check container div ID is "divTargetChildDOD", increase wait to 1500ms
+
+### Test Fails: "PC1 DOD container was not found"
+- **Issue**: Option 21 selected but DOD field didn't appear
+- **Solution**: Verify change event triggered, check container div ID is "divPC1DOD", increase wait to 1500ms
+
+### Test Fails: "List program container was not found"
+- **Issue**: Option 25 selected but program field didn't appear
+- **Solution**: Verify change event triggered, check container div ID is "divTransferredtoProgram", increase wait to 1500ms
+
+### Test Fails: "Supervisory approval message was not found"
+- **Issue**: Option 37 submitted but approval message didn't appear
+- **Solution**: Check if case actually has forms requiring approval, verify message appears in toast or on page, check XPath selector
+
 ---
 
 ## Selectors Reference
@@ -546,6 +857,15 @@ dotnet test --filter "FullyQualifiedName~DischargeTests.ReinstateCaseFromDischar
 | **Discharge Date Input** | `input.form-control[class*='2dy']` |
 | **Discharge Reason Dropdown** | `select.form-control[id*='ddlDischargeReason']` |
 | **Discharge Reason Specify** | `input.form-control[id*='Specify']` |
+| **Target Child DOD Input** | `input.form-control[id*='txtTargetChildDOD']` |
+| **Target Child DOD Container** | `div[id='divTargetChildDOD']` |
+| **PC1 DOD Input** | `input.form-control[id*='txtPC1DOD']` |
+| **PC1 DOD Container** | `div[id='divPC1DOD']` |
+| **List Program Input (text)** | `input.form-control[id*='txtTransferredtoProgram']` |
+| **List Program Container** | `div[id='divTransferredtoProgram']` |
+| **Transfer Program Dropdown** | `select.form-control[id*='ddlTransferredtoProgramFK']` |
+| **Acknowledgment Checkbox** | `input[type='checkbox'][id*='chkAcknowledgeRemoval']` |
+| **Transfer Acknowledgment Container** | `div[id='divTransferAcknowledgment']` |
 
 ### Buttons
 

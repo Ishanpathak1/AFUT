@@ -206,6 +206,68 @@ namespace AFUT.Tests.UnitTests.Discharge
         [Theory]
         [MemberData(nameof(GetTestPc1Ids))]
         [TestPriority(3)]
+        public void ValidateConditionalFieldsForSpecificDischargeReasons(string pc1Id)
+        {
+            using var driver = _driverFactory.CreateDriver();
+
+            // Use common helper for the navigation flow
+            var (homePage, formsPane) = CommonTestHelper.NavigateToFormsTab(driver, _config, pc1Id);
+
+            Assert.NotNull(homePage);
+            Assert.True(homePage.IsLoaded, "Home page did not load after selecting DataEntry role.");
+            _output.WriteLine("[PASS] Successfully navigated to Forms tab");
+
+            // Navigate to Discharge form
+            NavigateToDischargeForm(driver, formsPane, pc1Id);
+            _output.WriteLine("[PASS] Successfully navigated to Discharge form page");
+
+            // Enter today's date in the Discharge Date field
+            var dateInput = driver.FindElements(By.CssSelector(
+                "div.input-group.date input.form-control, " +
+                "input.form-control[class*='2dy']"))
+                .FirstOrDefault(el => el.Displayed)
+                ?? throw new InvalidOperationException("Discharge Date input was not found.");
+
+            var todayDate = DateTime.Now.ToString("MM/dd/yy");
+            WebElementHelper.SetInputValue(driver, dateInput, todayDate, "Discharge Date", triggerBlur: true);
+            driver.WaitForUpdatePanel(10);
+            driver.WaitForReady(10);
+            Thread.Sleep(500);
+
+            // Submit to proceed to reason selection
+            var submitButton = driver.FindElements(By.CssSelector("a.btn.btn-primary"))
+                .FirstOrDefault(el => el.Displayed && 
+                    !string.IsNullOrWhiteSpace(el.Text) && 
+                    el.Text.Contains("Submit", StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException("Submit button was not found.");
+
+            CommonTestHelper.ClickElement(driver, submitButton);
+            driver.WaitForUpdatePanel(30);
+            driver.WaitForReady(30);
+            Thread.Sleep(1000);
+
+            // Test Option 18 - Target Child Death (DOD field should appear)
+            _output.WriteLine("[INFO] Testing Option 18 - Target Child Death");
+            TestDischargeReasonWithDodField(driver, "18", "divTargetChildDOD", "txtTargetChildDOD", "Target Child DOD", "Missing Target Child DOD");
+
+            // Test Option 21 - PC1 Death (DOD field should appear)
+            _output.WriteLine("[INFO] Testing Option 21 - PC1 Death");
+            TestDischargeReasonWithDodField(driver, "21", "divPC1DOD", "txtPC1DOD", "PC1 DOD", "Missing PC1 DOD");
+
+            // Test Option 25 - Transferred to another program (List program field should appear)
+            _output.WriteLine("[INFO] Testing Option 25 - Transferred to another program");
+            TestDischargeReasonWithTransferField(driver, "25");
+
+            // Test Option 37 - Transfer to another HFNY program (should show approval message)
+            _output.WriteLine("[INFO] Testing Option 37 - Transfer to another HFNY program");
+            TestDischargeReasonWithApprovalMessage(driver, pc1Id, "37");
+
+            _output.WriteLine("[PASS] All conditional field validations completed successfully");
+        }
+
+        [Theory]
+        [MemberData(nameof(GetTestPc1Ids))]
+        [TestPriority(4)]
         public void ReinstateCaseFromDischargeForm(string pc1Id)
         {
             using var driver = _driverFactory.CreateDriver();
@@ -289,6 +351,345 @@ namespace AFUT.Tests.UnitTests.Discharge
 
             Assert.NotNull(formContainer);
             _output.WriteLine("[PASS] Discharge form container is present on the page");
+        }
+
+        /// <summary>
+        /// Tests discharge reasons that show DOD (Date of Death) field
+        /// </summary>
+        private void TestDischargeReasonWithDodField(IPookieWebDriver driver, string reasonValue, 
+            string divId, string inputIdPart, string fieldLabel, string expectedValidationMessage)
+        {
+            // Select the discharge reason
+            var reasonDropdown = driver.FindElements(By.CssSelector("select.form-control[id*='ddlDischargeReason']"))
+                .FirstOrDefault(el => el.Displayed)
+                ?? throw new InvalidOperationException("Discharge Reason dropdown was not found.");
+
+            var selectElement = new OpenQA.Selenium.Support.UI.SelectElement(reasonDropdown);
+            selectElement.SelectByValue(reasonValue);
+            _output.WriteLine($"[INFO] Selected discharge reason option {reasonValue}");
+
+            // Trigger change event
+            var js = (IJavaScriptExecutor)driver;
+            js.ExecuteScript("arguments[0].dispatchEvent(new Event('change', { bubbles: true }));", reasonDropdown);
+
+            driver.WaitForUpdatePanel(15);
+            driver.WaitForReady(15);
+            Thread.Sleep(1500);
+
+            // Verify DOD container is visible
+            var dodContainer = driver.WaitforElementToBeInDOM(By.CssSelector($"div[id='{divId}'], div[id*='{divId}']"), 10)
+                ?? throw new InvalidOperationException($"{fieldLabel} container was not found after selecting option {reasonValue}");
+
+            Assert.True(dodContainer.Displayed, $"{fieldLabel} container is not displayed after selecting option {reasonValue}");
+            _output.WriteLine($"[PASS] {fieldLabel} container appeared");
+
+            // Verify DOD input field is visible
+            var dodInput = driver.FindElements(By.CssSelector(
+                $"input.form-control[id*='{inputIdPart}'], " +
+                $"input.form-control[class*='2dy'][id*='{inputIdPart}']"))
+                .FirstOrDefault(el => el.Displayed)
+                ?? throw new InvalidOperationException($"{fieldLabel} input was not found.");
+
+            Assert.True(dodInput.Displayed, $"{fieldLabel} input is not displayed");
+            _output.WriteLine($"[PASS] {fieldLabel} input field is visible and accessible");
+
+            // Submit without filling DOD field - should trigger validation
+            var submitButton = driver.FindElements(By.CssSelector("a.btn.btn-primary"))
+                .FirstOrDefault(el => el.Displayed && 
+                    !string.IsNullOrWhiteSpace(el.Text) && 
+                    el.Text.Contains("Submit", StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException("Submit button was not found.");
+
+            CommonTestHelper.ClickElement(driver, submitButton);
+            driver.WaitForUpdatePanel(10);
+            driver.WaitForReady(10);
+            Thread.Sleep(1000);
+
+            // Verify validation message appears
+            var validationMessage = driver.FindElements(By.XPath(
+                $"//*[contains(text(), '{expectedValidationMessage}')]"))
+                .FirstOrDefault(el => el.Displayed);
+
+            if (validationMessage == null)
+            {
+                // Try to find in toast message
+                var toastMessage = WebElementHelper.GetToastMessage(driver, 1500);
+                if (!string.IsNullOrWhiteSpace(toastMessage))
+                {
+                    Assert.Contains(expectedValidationMessage, toastMessage, StringComparison.OrdinalIgnoreCase);
+                    _output.WriteLine($"[PASS] Validation message found in toast: {toastMessage}");
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Validation message '{expectedValidationMessage}' was not found after submitting without DOD");
+                }
+            }
+            else
+            {
+                Assert.Contains(expectedValidationMessage, validationMessage.Text, StringComparison.OrdinalIgnoreCase);
+                _output.WriteLine($"[PASS] Validation message displayed: {validationMessage.Text}");
+            }
+
+            // Re-find the DOD input element (it may have become stale after validation)
+            dodInput = driver.FindElements(By.CssSelector(
+                $"input.form-control[id*='{inputIdPart}'], " +
+                $"input.form-control[class*='2dy'][id*='{inputIdPart}']"))
+                .FirstOrDefault(el => el.Displayed)
+                ?? throw new InvalidOperationException($"{fieldLabel} input was not found after validation.");
+
+            // Now enter a date in the DOD field
+            var dodDate = DateTime.Now.AddDays(-30).ToString("MM/dd/yy");
+            WebElementHelper.SetInputValue(driver, dodInput, dodDate, fieldLabel, triggerBlur: true);
+            driver.WaitForUpdatePanel(10);
+            driver.WaitForReady(10);
+            Thread.Sleep(500);
+            _output.WriteLine($"[INFO] Entered DOD date: {dodDate}");
+        }
+
+        /// <summary>
+        /// Tests discharge reason 25 - Transferred to another program (List program field)
+        /// </summary>
+        private void TestDischargeReasonWithTransferField(IPookieWebDriver driver, string reasonValue)
+        {
+            // Select the discharge reason
+            var reasonDropdown = driver.FindElements(By.CssSelector("select.form-control[id*='ddlDischargeReason']"))
+                .FirstOrDefault(el => el.Displayed)
+                ?? throw new InvalidOperationException("Discharge Reason dropdown was not found.");
+
+            var selectElement = new OpenQA.Selenium.Support.UI.SelectElement(reasonDropdown);
+            selectElement.SelectByValue(reasonValue);
+            _output.WriteLine($"[INFO] Selected discharge reason option {reasonValue}");
+
+            // Trigger change event
+            var js = (IJavaScriptExecutor)driver;
+            js.ExecuteScript("arguments[0].dispatchEvent(new Event('change', { bubbles: true }));", reasonDropdown);
+
+            driver.WaitForUpdatePanel(15);
+            driver.WaitForReady(15);
+            Thread.Sleep(1500);
+
+            // Verify "List program" container is visible
+            var transferContainer = driver.WaitforElementToBeInDOM(By.CssSelector(
+                "div[id='divTransferredtoProgram'], " +
+                "div[id*='TransferredtoProgram']"), 10)
+                ?? throw new InvalidOperationException("List program container was not found after selecting option 25");
+
+            Assert.True(transferContainer.Displayed, "List program container is not displayed after selecting option 25");
+            _output.WriteLine("[PASS] List program container appeared");
+
+            // Verify "List program" input field is visible
+            var transferInput = driver.FindElements(By.CssSelector(
+                "input.form-control[id*='txtTransferredtoProgram']"))
+                .FirstOrDefault(el => el.Displayed)
+                ?? throw new InvalidOperationException("List program input was not found.");
+
+            Assert.True(transferInput.Displayed, "List program input is not displayed");
+            _output.WriteLine("[PASS] List program input field is visible and accessible");
+
+            // Submit without filling program field - should trigger validation
+            var submitButton = driver.FindElements(By.CssSelector("a.btn.btn-primary"))
+                .FirstOrDefault(el => el.Displayed && 
+                    !string.IsNullOrWhiteSpace(el.Text) && 
+                    el.Text.Contains("Submit", StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException("Submit button was not found.");
+
+            CommonTestHelper.ClickElement(driver, submitButton);
+            driver.WaitForUpdatePanel(10);
+            driver.WaitForReady(10);
+            Thread.Sleep(1000);
+
+            // Verify validation message appears
+            var validationMessage = driver.FindElements(By.XPath(
+                "//*[contains(text(), 'Missing Transfer to Program')]"))
+                .FirstOrDefault(el => el.Displayed);
+
+            if (validationMessage == null)
+            {
+                // Try to find in toast message
+                var toastMessage = WebElementHelper.GetToastMessage(driver, 1500);
+                if (!string.IsNullOrWhiteSpace(toastMessage))
+                {
+                    Assert.Contains("Missing Transfer to Program", toastMessage, StringComparison.OrdinalIgnoreCase);
+                    _output.WriteLine($"[PASS] Validation message found in toast: {toastMessage}");
+                }
+                else
+                {
+                    throw new InvalidOperationException("Validation message 'Missing Transfer to Program' was not found after submitting without program name");
+                }
+            }
+            else
+            {
+                Assert.Contains("Missing Transfer to Program", validationMessage.Text, StringComparison.OrdinalIgnoreCase);
+                _output.WriteLine($"[PASS] Validation message displayed: {validationMessage.Text}");
+            }
+
+            // Re-find the transfer input element (it may have become stale after validation)
+            transferInput = driver.FindElements(By.CssSelector(
+                "input.form-control[id*='txtTransferredtoProgram']"))
+                .FirstOrDefault(el => el.Displayed)
+                ?? throw new InvalidOperationException("List program input was not found after validation.");
+
+            // Now enter a program name
+            WebElementHelper.SetInputValue(driver, transferInput, "Test Transfer Program", "List program", triggerBlur: true);
+            driver.WaitForUpdatePanel(10);
+            driver.WaitForReady(10);
+            Thread.Sleep(500);
+            _output.WriteLine("[INFO] Entered program name: Test Transfer Program");
+        }
+
+        /// <summary>
+        /// Tests discharge reason 37 - Transfer to another HFNY program (shows approval message on submit)
+        /// </summary>
+        private void TestDischargeReasonWithApprovalMessage(IPookieWebDriver driver, string pc1Id, string reasonValue)
+        {
+            // Select the discharge reason
+            var reasonDropdown = driver.FindElements(By.CssSelector("select.form-control[id*='ddlDischargeReason']"))
+                .FirstOrDefault(el => el.Displayed)
+                ?? throw new InvalidOperationException("Discharge Reason dropdown was not found.");
+
+            var selectElement = new OpenQA.Selenium.Support.UI.SelectElement(reasonDropdown);
+            selectElement.SelectByValue(reasonValue);
+            _output.WriteLine($"[INFO] Selected discharge reason option {reasonValue}");
+
+            // Trigger change event
+            var js = (IJavaScriptExecutor)driver;
+            js.ExecuteScript("arguments[0].dispatchEvent(new Event('change', { bubbles: true }));", reasonDropdown);
+
+            driver.WaitForUpdatePanel(15);
+            driver.WaitForReady(15);
+            Thread.Sleep(1500);
+
+            // Step 1: Submit without selecting program - should trigger validation
+            var submitButton = driver.FindElements(By.CssSelector("a.btn.btn-primary"))
+                .FirstOrDefault(el => el.Displayed && 
+                    !string.IsNullOrWhiteSpace(el.Text) && 
+                    el.Text.Contains("Submit", StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException("Submit button was not found.");
+
+            CommonTestHelper.ClickElement(driver, submitButton);
+            driver.WaitForUpdatePanel(10);
+            driver.WaitForReady(10);
+            Thread.Sleep(1000);
+
+            // Verify validation message "Missing Transfer to Program"
+            var validationMessage = driver.FindElements(By.XPath(
+                "//*[contains(text(), 'Missing Transfer to Program')]"))
+                .FirstOrDefault(el => el.Displayed);
+
+            if (validationMessage == null)
+            {
+                // Try to find in toast message
+                var toastMessage = WebElementHelper.GetToastMessage(driver, 1500);
+                if (!string.IsNullOrWhiteSpace(toastMessage))
+                {
+                    Assert.Contains("Missing Transfer to Program", toastMessage, StringComparison.OrdinalIgnoreCase);
+                    _output.WriteLine($"[PASS] Validation message found in toast: {toastMessage}");
+                }
+                else
+                {
+                    throw new InvalidOperationException("Validation message 'Missing Transfer to Program' was not found after submitting without program selection");
+                }
+            }
+            else
+            {
+                Assert.Contains("Missing Transfer to Program", validationMessage.Text, StringComparison.OrdinalIgnoreCase);
+                _output.WriteLine($"[PASS] Validation message displayed: {validationMessage.Text}");
+            }
+
+            // Wait a moment for page to stabilize after validation
+            driver.WaitForUpdatePanel(5);
+            driver.WaitForReady(5);
+            Thread.Sleep(500);
+
+            // Step 2: Select a program from the dropdown (re-find after validation)
+            var programDropdown = driver.FindElements(By.CssSelector(
+                "select.form-control[id*='ddlTransferredtoProgramFK']"))
+                .FirstOrDefault(el => el.Displayed)
+                ?? throw new InvalidOperationException("Transfer to Program dropdown was not found after validation.");
+
+            var programSelectElement = new OpenQA.Selenium.Support.UI.SelectElement(programDropdown);
+            
+            // Get all valid program options (exclude the --Select-- option)
+            var validPrograms = programSelectElement.Options
+                .Where(opt => !string.IsNullOrWhiteSpace(opt.GetAttribute("value")) && 
+                             !opt.Text.Contains("Select", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (!validPrograms.Any())
+            {
+                throw new InvalidOperationException("No valid program options found in dropdown.");
+            }
+
+            // Select a random program
+            var random = new Random();
+            var randomProgram = validPrograms[random.Next(validPrograms.Count)];
+            programSelectElement.SelectByValue(randomProgram.GetAttribute("value"));
+            _output.WriteLine($"[INFO] Selected transfer program: {randomProgram.Text.Trim()}");
+
+            driver.WaitForUpdatePanel(10);
+            driver.WaitForReady(10);
+            Thread.Sleep(1000);
+
+            // Step 3: Check the acknowledgment checkbox (re-find after dropdown selection)
+            var acknowledgmentCheckbox = driver.FindElements(By.CssSelector(
+                "input[type='checkbox'][id*='chkAcknowledgeRemoval']"))
+                .FirstOrDefault()
+                ?? throw new InvalidOperationException("Acknowledgment checkbox was not found after program selection.");
+
+            // Check if already checked, if not then check it
+            if (!acknowledgmentCheckbox.Selected)
+            {
+                CommonTestHelper.ClickElement(driver, acknowledgmentCheckbox);
+                _output.WriteLine("[INFO] Checked acknowledgment checkbox");
+            }
+            else
+            {
+                _output.WriteLine("[INFO] Acknowledgment checkbox already checked");
+            }
+
+            driver.WaitForUpdatePanel(5);
+            driver.WaitForReady(5);
+            Thread.Sleep(500);
+
+            // Step 4: Submit the form again
+            submitButton = driver.FindElements(By.CssSelector("a.btn.btn-primary"))
+                .FirstOrDefault(el => el.Displayed && 
+                    !string.IsNullOrWhiteSpace(el.Text) && 
+                    el.Text.Contains("Submit", StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException("Submit button was not found.");
+
+            CommonTestHelper.ClickElement(driver, submitButton);
+            driver.WaitForUpdatePanel(30);
+            driver.WaitForReady(30);
+            Thread.Sleep(2000);
+
+            // Verify the supervisory approval message appears
+            var approvalMessage = driver.FindElements(By.XPath(
+                "//*[contains(text(), 'supervisory approval') or " +
+                "contains(text(), 'require supervisory approval') or " +
+                "contains(text(), 'forms for this case which require supervisory approval')]"))
+                .FirstOrDefault(el => el.Displayed);
+
+            if (approvalMessage == null)
+            {
+                // Try to find in toast message
+                var toastMessage = WebElementHelper.GetToastMessage(driver, 1500);
+                if (!string.IsNullOrWhiteSpace(toastMessage))
+                {
+                    Assert.Contains("supervisory approval", toastMessage, StringComparison.OrdinalIgnoreCase);
+                    _output.WriteLine($"[PASS] Supervisory approval message found in toast: {toastMessage}");
+                }
+                else
+                {
+                    throw new InvalidOperationException("Supervisory approval message was not found after submitting option 37");
+                }
+            }
+            else
+            {
+                var messageText = approvalMessage.Text?.Trim();
+                Assert.Contains("supervisory approval", messageText, StringComparison.OrdinalIgnoreCase);
+                _output.WriteLine($"[PASS] Supervisory approval message displayed: {messageText}");
+            }
         }
 
         #endregion
